@@ -3,3 +3,5 @@ openai==1.12.0
 python-dotenv==1.0.0
 LunarDate==0.2.2
 psutil==5.9.8
+httpx==0.24.1
+httpcore==0.17.3
