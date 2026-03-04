@@ -685,7 +685,18 @@ def main():
         print("✅ Bot started successfully!")
         print("按 Ctrl+C 停止运行")
         
-        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        PORT = int(os.environ.get("PORT", 10000))
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
+
+if WEBHOOK_URL:
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        webhook_url=f"{WEBHOOK_URL}/webhook",
+        url_path="webhook"
+    )
+else:
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
     
     finally:
         # 确保退出时释放锁
