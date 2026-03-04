@@ -149,7 +149,7 @@ def cleanup_old_files(directory: Path, days: int, pattern: str):
             file_time = datetime.fromtimestamp(file.stat().st_mtime)
             if file_time < cutoff_date:
                 file.unlink()
-                logger.info(f"🗑️ 已删除旧文件：{file.name}")
+                print(f"🗑️ 已删除旧文件：{file.name}")
 
 logger = setup_logging()
 
