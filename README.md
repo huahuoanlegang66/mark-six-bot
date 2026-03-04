@@ -55,8 +55,8 @@ python --version
 
 您已经拥有以下密钥（已配置在代码中）：
 
-- **Telegram Bot Token**：`8364469234:AAEIGoaxHl_1cvGrAY1TAbAou8f6azbpZVY`
-- **DeepSeek API Key**：`sk-b4d2be45c898499dab17e771b2b935df`
+- **Telegram Bot Token**：`8f6azbpZVY`
+- **DeepSeek API Key**：`1b2b935df`
 
 ---
 
