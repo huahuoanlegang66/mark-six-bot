@@ -697,6 +697,23 @@ def main():
                 )
             else:
                 application.run_polling(allowed_updates=Update.ALL_TYPES)
+```
+
+⚠️ **注意：PORT那行前面是12个空格，后面每行保持对齐**
+
+---
+
+## 建议换个方式修改
+
+GitHub网页改缩进很容易出错，建议：
+
+1. 打开本地 `D:\六\main.py`
+2. 用 **PyCharm 或 VSCode** 修改（会自动处理缩进）
+3. 改完后在PowerShell执行：
+```
+git add .
+git commit -m "fix webhook indent"
+git push
     
     finally:
         # 确保退出时释放锁
