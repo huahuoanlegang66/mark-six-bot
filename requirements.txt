@@ -1,4 +1,4 @@
-python-telegram-bot[job-queue]==20.3
+python-telegram-bot[job-queue,webhooks]==20.3
 openai>=1.50.0
 python-dotenv==1.0.0
 LunarDate==0.2.2
