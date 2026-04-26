@@ -5,7 +5,6 @@ import os
 import sys
 import json
 import logging
-import asyncio
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple
@@ -50,6 +49,8 @@ BACKUP_DIR.mkdir(exist_ok=True)
 LOG_DIR.mkdir(exist_ok=True)
 
 
+# ======================== 进程锁 ========================
+
 def acquire_lock() -> bool:
     if LOCK_FILE.exists():
         try:
@@ -58,7 +59,6 @@ def acquire_lock() -> bool:
             import psutil
             if psutil.pid_exists(old_pid):
                 print(f"错误：Bot 已在运行中（进程 ID: {old_pid}）")
-                print(f"请删除文件：{LOCK_FILE}")
                 return False
             else:
                 LOCK_FILE.unlink()
@@ -81,6 +81,8 @@ def release_lock():
         except Exception:
             pass
 
+
+# ======================== 日志 ========================
 
 def cleanup_old_files(directory: Path, days: int, pattern: str):
     cutoff_date = datetime.now() - timedelta(days=days)
@@ -110,6 +112,8 @@ def setup_logging():
 logger = setup_logging()
 
 
+# ======================== 农历年份 ========================
+
 def get_current_lunar_year() -> Tuple[int, str, Dict[str, List[str]]]:
     today = datetime.now()
     try:
@@ -138,19 +142,127 @@ def get_current_lunar_year() -> Tuple[int, str, Dict[str, List[str]]]:
         return 2026, "马", {"马": ["01", "13", "25", "37", "49"]}
 
 
-COLOR_MAPPING = {
+# ======================== 号码对照表（Python查表，精确100%）========================
+
+# 波色对照表（固定）
+COLOR_MAP = {
     "红波": ["01", "02", "07", "08", "12", "13", "18", "19", "23", "24", "29", "30", "34", "35", "40", "45", "46"],
     "蓝波": ["03", "04", "09", "10", "14", "15", "20", "25", "26", "31", "36", "37", "41", "42", "47", "48"],
-    "绿波": ["05", "06", "11", "16", "17", "21", "22", "27", "28", "32", "33", "38", "39", "43", "44", "49"]
+    "绿波": ["05", "06", "11", "16", "17", "21", "22", "27", "28", "32", "33", "38", "39", "43", "44", "49"],
 }
 
+# 波色单双细分（固定）
+COLOR_PARITY_MAP = {
+    "红单": ["01", "07", "13", "19", "23", "29", "35", "45"],
+    "红双": ["02", "08", "12", "18", "24", "30", "34", "40", "46"],
+    "蓝单": ["03", "09", "15", "25", "31", "37", "41", "47"],
+    "蓝双": ["04", "10", "14", "20", "26", "36", "42", "48"],
+    "绿单": ["05", "11", "17", "21", "27", "33", "39", "43", "49"],
+    "绿双": ["06", "16", "22", "28", "32", "38", "44"],
+}
+
+# 大小单双（固定）
+SIZE_PARITY_MAP = {
+    "小数": [f"{i:02d}" for i in range(1, 25)],
+    "大数": [f"{i:02d}" for i in range(25, 50)],
+    "小单": [f"{i:02d}" for i in range(1, 25) if i % 2 != 0],
+    "小双": [f"{i:02d}" for i in range(1, 25) if i % 2 == 0],
+    "大单": [f"{i:02d}" for i in range(25, 50) if i % 2 != 0],
+    "大双": [f"{i:02d}" for i in range(25, 50) if i % 2 == 0],
+    "单号": [f"{i:02d}" for i in range(1, 50) if i % 2 != 0],
+    "双号": [f"{i:02d}" for i in range(1, 50) if i % 2 == 0],
+}
+
+# 头组对照表（固定）
+HEAD_MAP = {
+    "0": [f"{i:02d}" for i in range(1, 10)],   # 0头: 01-09
+    "1": [f"{i:02d}" for i in range(10, 20)],  # 1头: 10-19
+    "2": [f"{i:02d}" for i in range(20, 30)],  # 2头: 20-29
+    "3": [f"{i:02d}" for i in range(30, 40)],  # 3头: 30-39
+    "4": [f"{i:02d}" for i in range(40, 50)],  # 4头: 40-49
+}
+
+
+def lookup_numbers(item: dict, zodiac_mapping: Dict[str, List[str]]) -> List[str]:
+    """
+    根据 AI 解析的 item 类型，从 Python 对照表精确查出号码列表
+    AI 只负责识别结构，Python 负责查表，100% 准确
+    """
+    t = item.get("type", "")
+    numbers = []
+
+    if t == "zodiac":
+        # 生肖：从农历生肖对照表查
+        for name in item.get("names", []):
+            if name in zodiac_mapping:
+                numbers.extend(zodiac_mapping[name])
+            else:
+                logger.warning(f"未知生肖：{name}")
+
+    elif t == "color":
+        # 波色：红波/蓝波/绿波
+        for name in item.get("names", []):
+            if name in COLOR_MAP:
+                numbers.extend(COLOR_MAP[name])
+            else:
+                logger.warning(f"未知波色：{name}")
+
+    elif t == "color_parity":
+        # 波色单双：红单/红双/蓝单/蓝双/绿单/绿双
+        for name in item.get("names", []):
+            if name in COLOR_PARITY_MAP:
+                numbers.extend(COLOR_PARITY_MAP[name])
+            else:
+                logger.warning(f"未知波色单双：{name}")
+
+    elif t == "size_parity":
+        # 大小单双：小数/大数/小单/小双/大单/大双/单号/双号
+        for name in item.get("names", []):
+            if name in SIZE_PARITY_MAP:
+                numbers.extend(SIZE_PARITY_MAP[name])
+            else:
+                logger.warning(f"未知大小单双：{name}")
+
+    elif t == "head":
+        # 头组：0头/1头/2头/3头/4头
+        for h in item.get("heads", []):
+            h = str(h)
+            if h in HEAD_MAP:
+                numbers.extend(HEAD_MAP[h])
+            else:
+                logger.warning(f"未知头组：{h}")
+
+    elif t == "number":
+        # 直接号码
+        for n in item.get("numbers", []):
+            n = str(n).zfill(2)
+            if 1 <= int(n) <= 49:
+                numbers.append(n)
+
+    # 去重（同一个item内不去重，允许多个生肖有重叠号码累加）
+    return numbers
+
+
+def expand_bets(items: List[dict], zodiac_mapping: Dict[str, List[str]]) -> Dict[str, float]:
+    """
+    把 AI 解析的 items 展开成 {号码: 金额} 字典，同号自动累加
+    """
+    result: Dict[str, float] = {}
+    for item in items:
+        amount = float(item.get("amount", 0))
+        numbers = lookup_numbers(item, zodiac_mapping)
+        for num in numbers:
+            result[num] = result.get(num, 0) + amount
+    return result
+
+
+# ======================== 数据管理 ========================
 
 def load_data() -> Dict[str, float]:
     if DATA_FILE.exists():
         try:
             with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            return data
+                return json.load(f)
         except Exception:
             return init_data()
     return init_data()
@@ -189,100 +301,106 @@ def restore_data(date_str: str) -> bool:
         return False
 
 
+# ======================== DeepSeek API ========================
+
 client = OpenAI(
     api_key=DEEPSEEK_API_KEY,
     base_url="https://api.deepseek.com"
 )
 
 
-def build_system_prompt() -> str:
-    lunar_year, current_zodiac, zodiac_mapping = get_current_lunar_year()
-    zodiac_text = "\n".join([f"- {animal}({len(numbers)}个): {', '.join(numbers)}" for animal, numbers in zodiac_mapping.items()])
+def build_system_prompt(zodiac_mapping: Dict[str, List[str]]) -> str:
+    """
+    AI 只负责识别语义结构，不负责查号码
+    号码查表完全由 Python 代码处理
+    """
+    zodiac_names = "、".join(zodiac_mapping.keys())
 
-    prompt = f"""你是一个专业的六合彩下注解析助手。将用户的下注信息转换为标准 JSON 格式。
+    prompt = f"""你是六合彩下注语义解析助手。你的唯一任务是识别用户输入的结构，输出JSON。
+你不需要知道任何号码，号码查表由程序自动完成。
 
-【当前年份】：{lunar_year}年{current_zodiac}年
+【你需要识别的类型】
 
-【生肖号码对照表】（共49个号码，每个生肖4个号码）
-{zodiac_text}
+1. type=zodiac（生肖）
+   - 识别关键词：{zodiac_names}
+   - 示例：马鼠鸡各号15米 → {{"type":"zodiac","names":["马","鼠","鸡"],"amount":15}}
 
-⚠️ 生肖解析铁律：
-- 用户输入多个生肖时，必须逐个处理每一个，绝对不能遗漏任何一个
-- 处理前先数清楚用户写了几个生肖，处理后再数一遍结果里有几个生肖的号码，必须一致
-- 每个生肖固定4个号码，7个生肖=28个号码，8个生肖=32个号码，以此类推
+2. type=color（波色）
+   - 识别关键词：红波、蓝波、绿波
+   - 示例：红波各号10 → {{"type":"color","names":["红波"],"amount":10}}
 
-【波色对照表】（固定不变）
-- 红波(17个): 01,02,07,08,12,13,18,19,23,24,29,30,34,35,40,45,46
-- 蓝波(16个): 03,04,09,10,14,15,20,25,26,31,36,37,41,42,47,48
-- 绿波(16个): 05,06,11,16,17,21,22,27,28,32,33,38,39,43,44,49
+3. type=color_parity（波色单双）
+   - 识别关键词：红单、红双、蓝单、蓝双、绿单、绿双
+   - 示例：红双蓝单各号5 → {{"type":"color_parity","names":["红双","蓝单"],"amount":5}}
 
-【波色单双细分】
-- 红单(8个): 01,07,13,19,23,29,35,45
-- 红双(9个): 02,08,12,18,24,30,34,40,46
-- 蓝单(8个): 03,09,15,25,31,37,41,47
-- 蓝双(8个): 04,10,14,20,26,36,42,48
-- 绿单(8个): 05,11,17,21,27,33,39,43,49
-- 绿双(8个): 06,16,22,28,32,38,44（注意：绿双只有7个，不是8个）
+4. type=size_parity（大小单双）
+   - 识别关键词：小数、大数、小单、小双、大单、大双、单号、双号
+   - 示例：小单各号10 → {{"type":"size_parity","names":["小单"],"amount":10}}
 
-⚠️ 绿双修正：绿双只有7个号码：06,16,22,28,32,38,44
+5. type=head（头组）
+   - 识别关键词：0头、1头、2头、3头、4头
+   - 示例：03头各号10 → {{"type":"head","heads":["3"],"amount":10}}
+   - 注意：03头=3头，头前面的0去掉
 
-【大小数细分】
-- 小数(24个): 01-24 即 01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24
-- 大数(25个): 25-49 即 25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49
-- 小单(12个): 01,03,05,07,09,11,13,15,17,19,21,23
-- 小双(12个): 02,04,06,08,10,12,14,16,18,20,22,24
-- 大单(13个): 25,27,29,31,33,35,37,39,41,43,45,47,49
-- 大双(12个): 26,28,30,32,34,36,38,40,42,44,46,48
+6. type=number（直接号码）
+   - 用户直接写出的数字号码
+   - 示例：07,13,25各15 → {{"type":"number","numbers":["07","13","25"],"amount":15}}
+   - 注意：号码必须是01-49的两位数字符串
 
-【单双号】
-- 单号(25个): 01,03,05,07,09,11,13,15,17,19,21,23,25,27,29,31,33,35,37,39,41,43,45,47,49
-- 双号(24个): 02,04,06,08,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48
-
-【金额单位识别】
-- "#" "井" "米" "文" "蚊" "点" "元" 都表示金额单位，直接读取前面的数字
+【金额单位】
+"#" "井" "米" "文" "蚊" "点" "元" 都表示金额，直接读数字
 
 【分隔符】
-- 逗号、句号、斜杠、横杠、空格 都是分隔符
+逗号、句号、斜杠、横杠、空格 都是分隔符
 
 【忽略内容】
-- "澳门" "奥门" "香港" "澳" 等地区名称直接忽略
-- "共XXX" "合计XXX" 是总金额说明，忽略，不作为下注处理
-
-【同号累加规则】
-- 同一号码在同一条消息中出现多次，金额必须累加
-- 例如：40号在红双($10)和单独指定($5)中都出现，则40号=$15
+- "澳门" "香港" "澳" 等地区名
+- "共XXX" "合计XXX" 总金额说明
 
 【输出格式】只输出JSON，不要任何其他文字：
-{{"bets": [{{"number": "07", "amount": 50}}]}}
+{{"items":[
+  {{"type":"zodiac","names":["马","鼠"],"amount":15}},
+  {{"type":"number","numbers":["07","13"],"amount":10}}
+]}}
 
-规则：
-- number必须是两位字符串(01-49)
-- amount是数字
-- 同号累加后只出现一次
-- 无法解析返回{{"bets": []}}"""
+无法解析时返回：{{"items":[]}}"""
     return prompt
 
 
-async def parse_bet_text(text: str) -> List[Dict]:
+async def parse_bet_text(text: str, zodiac_mapping: Dict[str, List[str]]) -> Dict[str, float]:
+    """
+    第一步：AI 识别语义结构
+    第二步：Python 查表展开号码
+    返回 {号码: 金额} 字典
+    """
     try:
         response = client.chat.completions.create(
             model="deepseek-chat",
             messages=[
-                {"role": "system", "content": build_system_prompt()},
+                {"role": "system", "content": build_system_prompt(zodiac_mapping)},
                 {"role": "user", "content": text}
             ],
             response_format={"type": "json_object"},
-            temperature=0.3,
+            temperature=0.1,
             max_tokens=2000,
             timeout=30
         )
         result = response.choices[0].message.content
+        logger.info(f"AI返回：{result}")
         parsed = json.loads(result)
-        return parsed.get("bets", [])
+        items = parsed.get("items", [])
+
+        # Python 查表展开，精确100%
+        bets = expand_bets(items, zodiac_mapping)
+        logger.info(f"展开结果：{len(bets)} 个号码，共 ${sum(bets.values()):.2f}")
+        return bets
+
     except Exception as e:
         logger.error(f"API调用失败：{e}")
-        return []
+        return {}
 
+
+# ======================== 消息去重 ========================
 
 processed_messages = set()
 
@@ -299,10 +417,20 @@ def mark_message_processed(message_id: int):
     processed_messages.add(message_id)
 
 
+# ======================== Telegram 命令处理器 ========================
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = """🎰 欢迎使用六合彩记账机器人！
 
 📝 直接发送下注文本，自动解析记账。
+
+支持格式：
+• 生肖：马鼠鸡各号15米
+• 波色：红波各号10井
+• 波色单双：红双蓝单各号5#
+• 大小单双：小单各号10米
+• 头组：03头各号10井
+• 直接号码：07,13,25各15米
 
 📊 命令列表：
 /top - 查看风险 Top 10
@@ -379,20 +507,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     mark_message_processed(message_id)
 
-    logger.info(f"处理消息 [ID:{message_id}] 用户{user_id}：{text[:50]}")
+    logger.info(f"处理消息 [ID:{message_id}] 用户{user_id}：{text[:80]}")
 
-    bets = await parse_bet_text(text)
+    # 获取当前生肖对照表
+    _, _, zodiac_mapping = get_current_lunar_year()
+
+    # AI识别结构 + Python查表展开
+    bets = await parse_bet_text(text, zodiac_mapping)
+
     if not bets:
         await update.message.reply_text("⚠️ 解析失败，请人工核对")
         return
 
+    # 加载并更新数据
     data = load_data()
     total_amount = 0
     details = []
 
-    for bet in bets:
-        number = bet["number"]
-        amount = bet["amount"]
+    for number, amount in sorted(bets.items()):
         if number in data:
             data[number] += amount
             total_amount += amount
@@ -400,17 +532,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     save_data(data)
 
+    # Top 10
     sorted_numbers = sorted(
         [(num, amount) for num, amount in data.items() if amount > 0],
         key=lambda x: x[1], reverse=True
     )[:10]
 
-    top_text = "\n".join([f"{i+1}️⃣ {num}号 - ${amt:,.2f}" for i, (num, amt) in enumerate(sorted_numbers)])
+    top_text = "\n".join([
+        f"{i+1}️⃣ {num}号 - ${amt:,.2f}"
+        for i, (num, amt) in enumerate(sorted_numbers)
+    ])
 
     reply = f"""✅ 已记录本单：
 {chr(10).join(details)}
 ━━━━━━━━━━━━
-📊 本单总额：${total_amount:.2f}
+📊 本单总额：${total_amount:.2f}（共{len(bets)}个号码）
 
 🔥 当前风险 Top 10：
 {top_text}"""
@@ -419,27 +555,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.info(f"记账成功：${total_amount:.2f}，{len(bets)}个号码")
 
 
+# ======================== 定时任务 ========================
+
 async def daily_backup_task(context: ContextTypes.DEFAULT_TYPE):
     backup_data()
     logger.info("定时备份完成")
 
 
+# ======================== 主程序 ========================
+
 def main():
-    # 云端 Webhook 模式不需要进程锁
     WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 
     if not WEBHOOK_URL:
-        # 本地模式才需要进程锁
         if not acquire_lock():
             print(f"请手动删除：{LOCK_FILE}")
             return
 
     try:
         logger.info("🚀 六合彩记账机器人启动中...")
-
-        lunar_year, current_zodiac, zodiac_mapping = get_current_lunar_year()
-        print(f"📅 当前农历年份：{lunar_year}年{current_zodiac}年")
-        print(f"当年生肖：{current_zodiac} ({', '.join(zodiac_mapping[current_zodiac])})")
+        _, current_zodiac, zodiac_mapping = get_current_lunar_year()
+        print(f"📅 当年生肖：{current_zodiac} ({', '.join(zodiac_mapping[current_zodiac])})")
 
         application = Application.builder().token(TELEGRAM_TOKEN).build()
 
@@ -458,10 +594,9 @@ def main():
         )
 
         if WEBHOOK_URL:
-            # 云端 Webhook 模式
             PORT = int(os.environ.get("PORT", 10000))
             logger.info(f"✅ Webhook模式启动，端口：{PORT}")
-            print(f"✅ Bot started successfully! (Webhook模式)")
+            print("✅ Bot started successfully! (Webhook模式)")
             application.run_webhook(
                 listen="0.0.0.0",
                 port=PORT,
@@ -469,7 +604,6 @@ def main():
                 url_path="webhook"
             )
         else:
-            # 本地轮询模式
             logger.info("✅ Bot started successfully!")
             print("✅ Bot started successfully!")
             print("按 Ctrl+C 停止运行")
