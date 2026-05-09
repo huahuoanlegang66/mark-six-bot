@@ -375,14 +375,14 @@ async def parse_bet_text(text: str, zodiac_mapping: Dict[str, List[str]]) -> Dic
     """
     try:
         response = client.chat.completions.create(
-            model="deepseek-v3",
+            model="deepseek-chat",
             messages=[
                 {"role": "system", "content": build_system_prompt(zodiac_mapping)},
                 {"role": "user", "content": text}
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
-            max_tokens=500,
+            max_tokens=2000,
             timeout=30
         )
         result = response.choices[0].message.content
