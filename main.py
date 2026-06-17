@@ -505,10 +505,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         for i, (num, amt) in enumerate(sorted_numbers)
     ])
 
+    grand_total = sum(data.values())
+
     reply = f"""✅ 已记录本单：
 {chr(10).join(details)}
 ━━━━━━━━━━━━
 📊 本单总额：${total_amount:.2f}（共{len(bets)}个号码）
+💰 目前累计收数：${grand_total:.2f}
 
 🔥 当前风险 Top 10：
 {top_text}"""
