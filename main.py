@@ -289,55 +289,39 @@ client = OpenAI(
 def build_system_prompt(zodiac_mapping: Dict[str, List[str]]) -> str:
     zodiac_names = "、".join(zodiac_mapping.keys())
 
-    prompt = f"""你是六合彩下注语义解析助手。你的唯一任务是识别用户输入的结构，输出JSON。
-你不需要知道任何号码，号码查表由程序自动完成。
+    prompt = f"""解析六合彩下注文本为JSON。只输出JSON，不要其他文字。
 
-【你需要识别的类型】
+【类型】
+zodiac=生肖（{zodiac_names}）
+color=波色（红波/蓝波/绿波）
+color_parity=波色单双（红单/红双/蓝单/蓝双/绿单/绿双）
+size_parity=大小单双（小数/大数/小单/小双/大单/大双/单号/双号）
+head=头组（0头/1头/2头/3头/4头，写heads数字，如03头→heads:["3"]）
+number=直接号码
 
-1. type=zodiac（生肖）
-   - 识别关键词：{zodiac_names}
-   - 示例：马鼠鸡各号15米 → {{"type":"zodiac","names":["马","鼠","鸡"],"amount":15}}
+【号码规则·重要】
+- 号码范围01-49，必须输出两位字符串
+- 单个数字补零：1→"01"，7→"07"，9→"09"
+- 用户写的每一个号码都要识别，一个都不能漏，输出前数一遍数量是否和输入一致
 
-2. type=color（波色）
-   - 识别关键词：红波、蓝波、绿波
-   - 示例：红波各号10 → {{"type":"color","names":["红波"],"amount":10}}
+【金额】
+- 数字后任意字（#井米文蚊点元斤两块A等）都是金额单位，取数字
+- "各5"没单位时也按金额5处理
 
-3. type=color_parity（波色单双）
-   - 识别关键词：红单、红双、蓝单、蓝双、绿单、绿双
-   - 示例：红双蓝单各号5 → {{"type":"color_parity","names":["红双","蓝单"],"amount":5}}
+【分隔符】逗号、句号、斜杠/、横杠-、星号*、空格 都是号码分隔符
 
-4. type=size_parity（大小单双）
-   - 识别关键词：小数、大数、小单、小双、大单、大双、单号、双号
-   - 示例：小单各号10 → {{"type":"size_parity","names":["小单"],"amount":10}}
+【忽略】澳门/奥门/香港/澳/共XX/合计XX 这些词直接跳过
 
-5. type=head（头组）
-   - 识别关键词：0头、1头、2头、3头、4头
-   - 示例：03头各号10 → {{"type":"head","heads":["3"],"amount":10}}
-   - 注意：03头=3头，头前面的0去掉
+【同号累加】同一号码多次出现，程序会自动累加，你只需如实列出
 
-6. type=number（直接号码）
-   - 用户直接写出的数字号码
-   - 示例：07,13,25各15 → {{"type":"number","numbers":["07","13","25"],"amount":15}}
-   - 注意：号码必须是01-49的两位数字符串
+【示例】
+马鼠鸡各号15米→{{"type":"zodiac","names":["马","鼠","鸡"],"amount":15}}
+红双蓝单各号5#→{{"type":"color_parity","names":["红双","蓝单"],"amount":5}}
+1*13*34*7各10A→{{"type":"number","numbers":["01","13","34","07"],"amount":10}}
 
-【金额单位】（任何跟在金额数字后面的字都是单位，直接读取前面的数字）
-常见单位："#" "井" "米" "文" "蚊" "点" "元" "斤" "两" "块" "毛" "蚊鸡"等
-如果数字后面跟着任何看起来像单位的字，都按金额处理
-
-【分隔符】
-逗号、句号、斜杠、横杠、空格 都是分隔符
-
-【忽略内容】
-- "澳门" "香港" "澳" 等地区名
-- "共XXX" "合计XXX" 总金额说明
-
-【输出格式】只输出JSON，不要任何其他文字：
-{{"items":[
-  {{"type":"zodiac","names":["马","鼠"],"amount":15}},
-  {{"type":"number","numbers":["07","13"],"amount":10}}
-]}}
-
-无法解析时返回：{{"items":[]}}"""
+【输出格式】
+{{"items":[...]}}
+无法解析返回：{{"items":[]}}"""
     return prompt
 
 
@@ -351,7 +335,7 @@ async def parse_bet_text(text: str, zodiac_mapping: Dict[str, List[str]]) -> Dic
             ],
             response_format={"type": "json_object"},
             temperature=0.1,
-            max_tokens=2000,
+            max_tokens=500,
             timeout=30
         )
         result = response.choices[0].message.content
