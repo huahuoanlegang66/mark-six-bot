@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Tuple
 import shutil
+import threading
 
 BASE_DIR = Path(__file__).parent
 SITE_PACKAGES = BASE_DIR / "venv" / "Lib" / "site-packages"
@@ -511,9 +512,29 @@ async def daily_backup_task(context: ContextTypes.DEFAULT_TYPE):
     logger.info("定时备份完成")
 
 
+# ======================== 新增：Flask Web 服务器（让 Render 健康检查通过）========================
+
+from flask import Flask
+
+flask_app = Flask(__name__)
+
+@flask_app.route('/')
+def health_check():
+    return "OK", 200
+
+def run_flask():
+    port = int(os.environ.get("PORT", 10000))
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
+
 # ======================== 主程序 ========================
 
 def main():
+    # ===== 新增：先启动 Flask 服务器（后台线程），让 Render 认为服务在正常运行 =====
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
+    print("✅ Flask Web 服务器已启动（端口 " + os.environ.get("PORT", "10000") + "）")
+
     WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 
     if not WEBHOOK_URL:
